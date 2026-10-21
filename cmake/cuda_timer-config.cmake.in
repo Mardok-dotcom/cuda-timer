@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Consumers need the CUDA runtime headers (<cuda_runtime.h>).
+find_dependency(CUDAToolkit)
+
+# Provides cuda_timer::cuda_timer (INTERFACE, header-only).
+# Include dirs, C++17 requirement and NVTX_ENABLED define (if enabled at
+# install time) come with the target; nothing else to link.
+include("${CMAKE_CURRENT_LIST_DIR}/cuda_timer-targets.cmake")
+
+check_required_components(cuda_timer)

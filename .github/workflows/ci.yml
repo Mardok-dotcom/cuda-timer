@@ -1,0 +1,202 @@
+# cuda-timer CI (T3.5)
+#
+# COSA GIRA DOVE
+# -------------
+# - GitHub HOSTED runners (ubuntu-22.04 / windows-2022): NON hanno GPU.
+#   Il job `build` fa configure + compile e DEVE restare verde.
+#   Il job `runtime-test` esegue `ctest` senza `continue-on-error` ed e' un
+#   gate reale: le suite host-only (test_logger, test_stats, test_types)
+#   girano davvero e un loro fallimento rende il job rosso, mentre le suite
+#   che richiedono un device (test_timer, test_benchmark) escono con codice
+#   77 e ctest le riporta come SKIPPED. Senza GPU il verdetto e' quindi
+#   esplicito ("N skipped"), non un verde che nasconde un fallimento.
+# - SELF-HOSTED GPU runner: per il full test reale, aggiungere un job con
+#   `runs-on: [self-hosted, gpu]` che riusa gli stessi step di configure /
+#   build / ctest (vedi job `gpu-test` commentato in fondo come template).
+#
+# NOTE ARCH: CMAKE_CUDA_ARCHITECTURES=70 (PTX embedded -> JIT su sm_70/80/90,
+# compila e gira ovunque senza rigenerare SASS per ogni arch).
+
+name: CI
+
+"on":
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# Una nuova push sulla stessa PR cancella il run precedente ancora in coda.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_BUILD_TYPE: Release
+  CUDA_ARCH: 70
+
+jobs:
+  # ------------------------------------------------------------------
+  # Job 1 (obbligatorio, deve essere verde): configure + compile.
+  # ------------------------------------------------------------------
+  build:
+    name: Build (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+        cuda: ["11.8.0", "12.6.1"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # FetchContent (googletest) cache: evita il re-download a ogni run.
+      # La cartella _deps e' creata da CMake dentro il build dir.
+      - name: Cache FetchContent _deps
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-
+            fetchcontent-${{ matrix.os }}-
+
+      # Su Windows il generator Ninja ha bisogno di cl.exe nel PATH.
+      - name: Setup MSVC dev cmd (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup CUDA ${{ matrix.cuda }}
+        uses: Jimver/cuda-toolkit@v0.2.15
+        id: cuda-toolkit
+        with:
+          cuda: ${{ matrix.cuda }}
+          # Evita download di componenti non necessari su hosted runner.
+          use-github-cache: true
+          use-local-cache: true
+
+      - name: Check toolchain (ninja + nvcc)
+        shell: bash
+        run: |
+          cmake --version
+          ninja --version
+          nvcc --version
+          echo "CUDA_PATH=${CUDA_PATH:-$Env:CUDA_PATH}"
+
+      - name: Configure (Ninja, arch sm_70, examples+tests+NVTX ON)
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
+            -DCUDA_TIMER_BUILD_EXAMPLES=ON \
+            -DCUDA_TIMER_BUILD_TESTS=ON \
+            -DCUDA_TIMER_NVTX=ON
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
+
+      # Header-only: l'artefatto utile e' la cartella degli header.
+      # actions/upload-artifact zipp automaticamente la directory.
+      - name: Upload headers artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-timer-headers-${{ matrix.os }}-cuda${{ matrix.cuda }}
+          path: include/cuda_timer/
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Job 2: ctest, gate reale (nessun continue-on-error). Le suite
+  # host-only girano sempre; test_timer / test_benchmark escono con
+  # codice 77 senza device CUDA (tests/test_main_device.cpp) e ctest le
+  # riporta come SKIPPED. Con una GPU gli stessi test girano davvero e
+  # un fallimento e' rosso.
+  # ------------------------------------------------------------------
+  runtime-test:
+    name: Runtime test (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+        cuda: ["11.8.0", "12.6.1"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache FetchContent _deps
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-
+            fetchcontent-${{ matrix.os }}-
+
+      - name: Setup MSVC dev cmd (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup CUDA ${{ matrix.cuda }}
+        uses: Jimver/cuda-toolkit@v0.2.15
+        id: cuda-toolkit
+        with:
+          cuda: ${{ matrix.cuda }}
+          use-github-cache: true
+          use-local-cache: true
+
+      - name: Check toolchain (ninja + nvcc)
+        shell: bash
+        run: |
+          cmake --version
+          ninja --version
+          nvcc --version
+
+      - name: Configure (stessi flag del job build)
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
+            -DCUDA_TIMER_BUILD_EXAMPLES=ON \
+            -DCUDA_TIMER_BUILD_TESTS=ON \
+            -DCUDA_TIMER_NVTX=ON
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
+
+      - name: Run ctest (skipped without a GPU, real run with one)
+        shell: bash
+        run: ctest --test-dir build --output-on-failure --timeout 300
+
+  # ------------------------------------------------------------------
+  # TEMPLATE self-hosted GPU (scommentare quando disponibile un runner
+  # con GPU NVIDIA + label [self-hosted, gpu]):
+  #
+  #  gpu-test:
+  #    name: Full GPU test (self-hosted)
+  #    runs-on: [self-hosted, gpu]
+  #    strategy:
+  #      fail-fast: false
+  #      matrix:
+  #        cuda: ["11.8.0", "12.6.1"]
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      # Su self-hosted il toolkit e' di solito preinstallato: se serve,
+  #      # riattivare qui lo step Jimver/cuda-toolkit.
+  #      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+  #              -DCMAKE_CUDA_ARCHITECTURES=70
+  #              -DCUDA_TIMER_BUILD_EXAMPLES=ON -DCUDA_TIMER_BUILD_TESTS=ON
+  #              -DCUDA_TIMER_NVTX=ON
+  #        shell: bash
+  #      - run: cmake --build build --config Release
+  #        shell: bash
+  #      - run: ctest --test-dir build --output-on-failure --timeout 300
+  #        shell: bash
+  #      # Smoke test esempi (solo con GPU!): ./build/basic_usage, ecc.
+  # ------------------------------------------------------------------

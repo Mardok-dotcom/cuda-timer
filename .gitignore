@@ -1,0 +1,46 @@
+# Build directory (Ninja + MSVC + CUDA artifacts)
+/build/
+/_build/
+/x64/
+/Debug/
+/Release/
+
+# GoogleTest FetchContent (if extracted outside of build/)
+/_deps/
+
+# Logs and sanitizer output (incl. zombie-locked docs/*.log)
+*.log
+docs/*.log
+
+# Local development plan — never published
+DEVELOPMENT_PLAN.md
+
+# Scratch area used while prototyping against a real workload
+/_work/
+
+# IDE / editor
+.vscode/
+.idea/
+*.user
+*.suo
+*.nuser
+
+# Binaries / intermediates
+*.exe
+*.dll
+*.obj
+*.o
+*.lib
+*.a
+*.exp
+*.ilk
+*.pdb
+*.idb
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/

@@ -1,0 +1,43 @@
+# Template: copy this file to .github/workflows/perf-gate.yml
+#
+# Requires a self-hosted runner with a GPU of the same model as the baseline
+# (label: gpu). Hosted GitHub runners have no GPU.
+name: Perf gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  perf-gate:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCUDA_TIMER_BUILD_TESTS=OFF
+          cmake --build build
+
+      - name: Measure current
+        # Replace with your harness: it must write current.csv and
+        # current.meta.json using write_samples() and write_environment().
+        run: ./build/benchmark_harness --samples current.csv --meta current.meta.json
+
+      - name: Compare against baseline
+        run: |
+          ./build/perf_gate \
+            --baseline bench/baseline.csv \
+            --current current.csv \
+            --threshold 0.05 \
+            --max-run-spread 0.02 \
+            --json perf-report.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: perf-report.json
