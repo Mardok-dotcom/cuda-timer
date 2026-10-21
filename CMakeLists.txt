@@ -55,9 +55,12 @@ function(cuda_timer_apply_warnings target)
     #   nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'
     # MSVC-style flags have the same problem ("/W4" is read as an input file:
     # "A single input file is required for a non-link phase").
+    # -Wpedantic is deliberately absent: nvcc's own generated code
+    # (cudafe1.cpp) uses line directives GCC calls a "GCC extension", so
+    # -Wpedantic -Werror fails on every .cu.
     target_compile_options(${target} PRIVATE
         $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>>:
-            SHELL:-Xcompiler=-Wall -Xcompiler=-Wextra -Xcompiler=-Wpedantic -Xcompiler=-Werror
+            SHELL:-Xcompiler=-Wall -Xcompiler=-Wextra -Xcompiler=-Werror
             SHELL:-Xcompiler=-Wno-unused-parameter -Xcompiler=-Wno-missing-field-initializers
         >
         $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CXX_COMPILER_ID:MSVC>>:

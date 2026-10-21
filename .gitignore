@@ -18,6 +18,9 @@ DEVELOPMENT_PLAN.md
 # Scratch area used while prototyping against a real workload
 /_work/
 
+# Downloaded CI failure logs (debug only, never published)
+/loggitct/
+
 # IDE / editor
 .vscode/
 .idea/

@@ -32,13 +32,13 @@ Header-only C++/CUDA library to measure GPU kernels, keep every sample, and fail
 
 ## Prerequisites
 
-- CUDA Toolkit 11.8+
+- CUDA Toolkit 11.8+ (on Windows with a recent Visual Studio, see the note below)
 - CMake 3.18+
 - C++17 compiler: Visual Studio 2019+ / GCC 9+ / Clang 11+
 - NVIDIA GPU with compute capability 7.0+ (CI compiles for sm_70 PTX, JIT-forward-compatible with sm_80/sm_90)
 - (Optional) Nsight Systems / Nsight Compute to visualize NVTX ranges
 
-> **Windows + CUDA < 12.6:** if your Visual Studio 2022 toolset is newer than the one CUDA officially supports, `nvcc` aborts during configure with `#error: -- unsupported Microsoft Visual Studio version!`. Set `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` in the environment before configuring. The CI does this on `windows-2022`.
+> **Windows with a recent Visual Studio:** MSVC 14.44 (VS 17.14) and newer reject CUDA < 12.4 in their own STL headers (`STL1002: Unexpected compiler version, expected CUDA 12.4 or newer`), and `nvcc` older than the toolset also aborts during configure with `#error: -- unsupported Microsoft Visual Studio version!`. Two consequences: use CUDA **12.4 or newer** on Windows (the CI uses 12.9.2 there), and if `nvcc` still refuses the toolset, set `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` in the environment before configuring. Linux is unaffected and keeps working with CUDA 11.8.
 
 ## Quickstart
 
@@ -302,7 +302,7 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 
 - **8 test suites / 116 GoogleTest cases**, wired into `ctest`.
 - Host-only suites always run; device suites exit with code 77 without a GPU and are reported as `skipped` instead of failing.
-- CI matrix: Ubuntu and Windows, CUDA 11.8 and 12.6, `-Wall -Wextra -Wpedantic -Werror` / `/W4 /WX`.
+- CI matrix: Ubuntu 22.04 with CUDA 11.8 and 12.1 (the documented floor), Windows 2022 with CUDA 12.9 (MSVC 14.44's STL headers reject CUDA < 12.4). Warnings are fatal everywhere: `-Wall -Wextra -Wpedantic -Werror` for host C++, `/W4 /WX` for MSVC, and `-Wall -Wextra -Werror` for `.cu` files (routed through `-Xcompiler`; `nvcc`'s own generated code is not `-Wpedantic`-clean).
 - Sanitizer report on RTX 2060 SUPER (CUDA 12.1): memcheck 0 errors, racecheck 0 hazards — [`docs/sanitizer-v1.0.0.md`](docs/sanitizer-v1.0.0.md).
 
 ## Limitations

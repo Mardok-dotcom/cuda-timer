@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`. Found by CI (the local toolchain is MSVC, where the flags already used `-Xcompiler`).
+- Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`, and `-Wpedantic` is no longer applied to CUDA sources. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`; once that was fixed, `-Wpedantic` failed on every `.cu` because `nvcc`'s generated `cudafe1.cpp` uses line directives GCC calls a "GCC extension". Found by CI (the local toolchain is MSVC, where the flags already used `-Xcompiler` and `-Wpedantic` was never passed).
 
 ### CI
 
-- `windows-2022` runners ship a Visual Studio 2022 toolset (MSVC 14.44) newer than the one CUDA 11.8/12.1 support, so `nvcc` aborted the compiler-id check with `#error: -- unsupported Microsoft Visual Studio version!`. The workflow now sets `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler`.
+- `windows-2022` runners ship a Visual Studio 2022 toolset (MSVC 14.44) whose STL headers reject CUDA older than 12.4 (`STL1002: Unexpected compiler version`) and whose `nvcc` version check aborts with `#error: -- unsupported Microsoft Visual Studio version!`. The matrix is now explicit: Ubuntu 22.04 with CUDA 11.8.0 and 12.1.1, Windows 2022 with CUDA 12.9.2 (the last 12.x line, still supporting `sm_70`; Volta was removed in CUDA 13). `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` covers the toolset check, and `Jimver/cuda-toolkit` was updated from v0.2.15 to v0.2.36 so recent CUDA versions are installable at all.
 
 ## [1.1] - 2026-10-21
 
