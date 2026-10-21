@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
+- Configure and build run under `pwsh` on Windows instead of `bash`: GitHub prepends `C:\Program Files\Git\usr\bin` to `PATH` for bash steps, and Git ships its own `link.exe`, so CMake picked it as the linker for the CUDA compiler test and configure died with `link: unknown option -- L`.
 - `windows-2022` runners ship a Visual Studio 2022 toolset (MSVC 14.44) whose STL headers reject CUDA older than 12.4 (`STL1002: Unexpected compiler version`) and whose `nvcc` version check aborts with `#error: -- unsupported Microsoft Visual Studio version!`. The matrix is now explicit: Ubuntu 22.04 with CUDA 11.8.0 and 12.1.1, Windows 2022 with CUDA 12.9.2 (the last 12.x line, still supporting `sm_70`; Volta was removed in CUDA 13). `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` covers the toolset check, and `Jimver/cuda-toolkit` was updated from v0.2.15 to v0.2.36 so recent CUDA versions are installable at all.
 
 ## [1.1] - 2026-10-21

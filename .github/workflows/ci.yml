@@ -89,7 +89,13 @@ jobs:
           echo "CUDA_PATH=$CUDA_PATH"
           echo "CUDA_TOOLKIT_ROOT_DIR=$CUDA_TOOLKIT_ROOT_DIR"
 
+      # Configure/build do NOT run under bash on Windows: GitHub prepends
+      # C:\Program Files\Git\usr\bin to PATH for bash steps, and Git ships its
+      # own link.exe, which CMake then picks as the linker for the CUDA
+      # compiler test ("link: unknown option -- L"). pwsh (the default
+      # Windows shell) keeps the MSVC toolchain ahead of it.
       - name: Configure (Ninja, arch sm_70, examples+tests+NVTX ON)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cmake -S . -B build -G Ninja \
@@ -99,8 +105,23 @@ jobs:
             -DCUDA_TIMER_BUILD_TESTS=ON \
             -DCUDA_TIMER_NVTX=ON
 
+      - name: Configure (Ninja, arch sm_70, examples+tests+NVTX ON)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_CUDA_ARCHITECTURES=$env:CUDA_ARCH" `
+            -DCUDA_TIMER_BUILD_EXAMPLES=ON `
+            -DCUDA_TIMER_BUILD_TESTS=ON `
+            -DCUDA_TIMER_NVTX=ON
+
       - name: Build
+        if: runner.os != 'Windows'
         shell: bash
+        run: cmake --build build
+
+      - name: Build
+        if: runner.os == 'Windows'
         run: cmake --build build
 
       # Header-only: l'artefatto utile e' la cartella degli header.
@@ -159,6 +180,7 @@ jobs:
           nvcc --version
 
       - name: Configure (stessi flag del job build)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cmake -S . -B build -G Ninja \
@@ -168,8 +190,24 @@ jobs:
             -DCUDA_TIMER_BUILD_TESTS=ON \
             -DCUDA_TIMER_NVTX=ON
 
+      # pwsh on Windows, same reason as in the build job (Git's link.exe).
+      - name: Configure (stessi flag del job build)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_CUDA_ARCHITECTURES=$env:CUDA_ARCH" `
+            -DCUDA_TIMER_BUILD_EXAMPLES=ON `
+            -DCUDA_TIMER_BUILD_TESTS=ON `
+            -DCUDA_TIMER_NVTX=ON
+
       - name: Build
+        if: runner.os != 'Windows'
         shell: bash
+        run: cmake --build build
+
+      - name: Build
+        if: runner.os == 'Windows'
         run: cmake --build build
 
       - name: Run ctest (skipped without a GPU, real run with one)
