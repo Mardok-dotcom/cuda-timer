@@ -1,3 +1,5 @@
+#include "cuda_test_kernels.cuh"
+
 #include <cuda_timer/timer.cuh>
 #include <cuda_timer/types.cuh>
 #include <gtest/gtest.h>
@@ -47,12 +49,10 @@ TEST(Timer, StartStopReturnsPositiveTime) {
     EXPECT_GT(ms, 0.0f);
 }
 
-__global__ void timer_dummy_kernel() {}
-
 TEST(Timer, ElapsedNonBlocking) {
     cuda_timer::Timer timer;
     timer.start();
-    timer_dummy_kernel<<<1, 1>>>();
+    cuda_test::launch_dummy();
     // NonBlocking pattern: record stop event, poll for completion,
     // then query elapsed WITHOUT synchronizing (stop event must be
     // recorded first, otherwise cudaEventElapsedTime is invalid).

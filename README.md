@@ -302,12 +302,13 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 
 - **8 test suites / 116 GoogleTest cases**, wired into `ctest`.
 - Host-only suites always run; device suites exit with code 77 without a GPU and are reported as `skipped` instead of failing.
+- GoogleTest is never compiled by `nvcc`: the suites are host C++ (`.cpp`) and the only CUDA translation unit in the test tree is `tests/cuda_test_kernels.cu`, which exposes a kernel launcher. Compiling gtest headers with `nvcc` fails on glibc hosts, where its device pass does not see the POSIX declarations gtest relies on (`rmdir`, `isatty`, `struct stat`).
 - CI matrix: Ubuntu 22.04 with CUDA 11.8 and 12.1 (the documented floor), Windows 2022 with CUDA 12.9 (MSVC 14.44's STL headers reject CUDA < 12.4). Warnings are fatal everywhere: `-Wall -Wextra -Wpedantic -Werror` for host C++, `/W4 /WX` for MSVC, and `-Wall -Wextra -Werror` for `.cu` files (routed through `-Xcompiler`; `nvcc`'s own generated code is not `-Wpedantic`-clean).
 - Sanitizer report on RTX 2060 SUPER (CUDA 12.1): memcheck 0 errors, racecheck 0 hazards — [`docs/sanitizer-v1.0.0.md`](docs/sanitizer-v1.0.0.md).
 
 ## Limitations
 
-- **No CUDA Graph support (by design).** cuda-timer does not capture graphs and does not do per-node analysis; use [Nsight Systems](https://developer.nvidia.com/nsight-systems) / Nsight Compute for that. Timing a graph *launch* needs no special support: `cudaGraphLaunch()` is ordinary stream work, so `Timer` / `benchmark()` bracket it like any kernel (covered by `tests/test_benchmark.cu`).
+- **No CUDA Graph support (by design).** cuda-timer does not capture graphs and does not do per-node analysis; use [Nsight Systems](https://developer.nvidia.com/nsight-systems) / Nsight Compute for that. Timing a graph *launch* needs no special support: `cudaGraphLaunch()` is ordinary stream work, so `Timer` / `benchmark()` bracket it like any kernel (covered by `tests/test_benchmark.cpp`).
 - **No clock/throttle sampling.** NVML is out of scope, so the fingerprint does not include clocks. Run-to-run spread catches instability between runs, not a uniform clock drop within a run.
 - **The fingerprint is opt-in.** If the harness does not call `write_environment()`, `perf_gate` compares the CSVs without verifying the environment (it prints a warning). The gate is honest only when you feed it the sidecar.
 - **One kernel per comparison.** There is no multi-kernel manifest yet; invoke `perf_gate` once per kernel.
@@ -340,14 +341,16 @@ cuda-timer/
 ├── tools/
 │   └── perf_gate.cpp
 ├── tests/
-│   ├── test_timer.cu
-│   ├── test_stats.cu
-│   ├── test_logger.cu
+│   ├── test_timer.cpp
+│   ├── test_stats.cpp
+│   ├── test_logger.cpp
 │   ├── test_compare.cpp
-│   ├── test_overhead.cu
-│   ├── test_environment.cu
-│   ├── test_benchmark.cu
-│   ├── test_types.cu
+│   ├── test_overhead.cpp
+│   ├── test_environment.cpp
+│   ├── test_benchmark.cpp
+│   ├── test_types.cpp
+│   ├── cuda_test_kernels.cu
+│   ├── cuda_test_kernels.cuh
 │   ├── test_main.cpp
 │   └── test_main_device.cpp
 ├── docs/

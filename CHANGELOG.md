@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The test suites are no longer CUDA translation units. Compiling GoogleTest with `nvcc` fails on glibc hosts: its device pass does not see the POSIX declarations gtest's portability layer uses (`rmdir`, `isatty`, `chdir`, `read`, `write`, `close`, `struct stat`), so every `.cu` test died inside `gtest-port.h` with "identifier is undefined" / "incomplete class type". All suites are now host C++ (`.cpp`) and the kernels moved to a single CUDA file, `tests/cuda_test_kernels.cu`, behind a host-callable launcher.
 - Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`, and `-Wpedantic` is no longer applied to CUDA sources. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`; once that was fixed, `-Wpedantic` failed on every `.cu` because `nvcc`'s generated `cudafe1.cpp` uses line directives GCC calls a "GCC extension". Found by CI (the local toolchain is MSVC, where the flags already used `-Xcompiler` and `-Wpedantic` was never passed).
 
 ### CI
@@ -28,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- CUDA Graph support is explicitly out of scope (not planned for a future release): for graph capture and per-node analysis use Nsight Systems/Compute. Timing a graph launch already works through `Timer`/`benchmark()` because a launch is ordinary stream work (covered by `tests/test_benchmark.cu`).
+- CUDA Graph support is explicitly out of scope (not planned for a future release): for graph capture and per-node analysis use Nsight Systems/Compute. Timing a graph launch already works through `Timer`/`benchmark()` because a launch is ordinary stream work (covered by `tests/test_benchmark.cpp`).
 - CSV escaping factored into `detail::escape_csv()` (`types.cuh`), shared by `CsvLogger` and `write_samples()`; it now also quotes fields containing CR/LF (previously only comma/quote).
 - `JsonLogger` now streams: `[` on construction, one record per `log()`, `]` only in `close()` (also from the destructor). `flush()` pushes bytes and never finalizes the array.
 

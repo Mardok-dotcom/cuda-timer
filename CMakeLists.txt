@@ -239,20 +239,23 @@ if(CUDA_TIMER_BUILD_TESTS)
     endfunction()
 
     # Suite that needs a real GPU: its main exits with 77 when no device is
-    # present and ctest reports the whole suite as SKIPPED.
+    # present and ctest reports the whole suite as SKIPPED. The kernels live in
+    # tests/cuda_test_kernels.cu; the suites themselves are host C++ because
+    # GoogleTest does not survive nvcc's device pass (see the header comment).
     function(cuda_timer_add_device_test name source)
         cuda_timer_configure_test(${name} ${source} ${PROJECT_SOURCE_DIR}/tests/test_main_device.cpp)
+        target_sources(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/cuda_test_kernels.cu)
     endfunction()
 
     # Unit tests
-    cuda_timer_add_test(test_logger           tests/test_logger.cu)
+    cuda_timer_add_test(test_logger           tests/test_logger.cpp)
     cuda_timer_add_test(test_compare          tests/test_compare.cpp)
-    cuda_timer_add_test(test_stats            tests/test_stats.cu)
-    cuda_timer_add_test(test_types            tests/test_types.cu)
-    cuda_timer_add_device_test(test_timer      tests/test_timer.cu)
-    cuda_timer_add_device_test(test_overhead   tests/test_overhead.cu)
-    cuda_timer_add_device_test(test_environment tests/test_environment.cu)
-    cuda_timer_add_device_test(test_benchmark  tests/test_benchmark.cu)
+    cuda_timer_add_test(test_stats            tests/test_stats.cpp)
+    cuda_timer_add_test(test_types            tests/test_types.cpp)
+    cuda_timer_add_device_test(test_timer      tests/test_timer.cpp)
+    cuda_timer_add_device_test(test_overhead   tests/test_overhead.cpp)
+    cuda_timer_add_device_test(test_environment tests/test_environment.cpp)
+    cuda_timer_add_device_test(test_benchmark  tests/test_benchmark.cpp)
 else()
     # Still enable testing() so ctest works when tests are added later
     enable_testing()

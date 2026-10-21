@@ -1,9 +1,9 @@
+#include "cuda_test_kernels.cuh"
+
 #include <cuda_timer/benchmark.cuh>
 #include <cuda_timer/timer.cuh>
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
-
-__global__ void dummy_kernel() {}
 
 TEST(Benchmark, BlockingModeRuns) {
     cuda_timer::BenchmarkConfig cfg;
@@ -12,7 +12,7 @@ TEST(Benchmark, BlockingModeRuns) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 5);
@@ -26,7 +26,7 @@ TEST(Benchmark, NonBlockingModeRuns) {
     cfg.sync_mode = cuda_timer::SyncMode::NonBlocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 5);
@@ -41,7 +41,7 @@ TEST(Benchmark, StoreSamplesEnablesMedian) {
     cfg.store_samples = true;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 10);
@@ -56,7 +56,7 @@ TEST(Benchmark, NVTXDoesNotCrash) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 2);
@@ -69,7 +69,7 @@ TEST(BenchmarkKernelHelper, WorksWithGridBlock) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark_kernel(
-        [](dim3 g, dim3 b) { dummy_kernel<<<g,b>>>(); },
+        [](dim3 g, dim3 b) { cuda_test::launch_dummy(g, b); },
         cfg, dim3(1), dim3(256)
     );
 
@@ -79,7 +79,7 @@ TEST(BenchmarkKernelHelper, WorksWithGridBlock) {
 TEST(Benchmark, DefaultConfig) {
     cuda_timer::BenchmarkConfig cfg;
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 100); // default measure_runs
@@ -97,7 +97,7 @@ TEST(Benchmark, CustomStream) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1,0,0>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 3);
@@ -115,7 +115,7 @@ TEST(Benchmark, NonBlockingWithStream) {
     cfg.sync_mode = cuda_timer::SyncMode::NonBlocking;
 
     auto stats = cuda_timer::benchmark([stream]() {
-        dummy_kernel<<<1,1,0,stream>>>();
+        cuda_test::launch_dummy(dim3(1), dim3(1), stream);
     }, cfg);
 
     EXPECT_EQ(stats.count(), 3);
@@ -129,7 +129,7 @@ TEST(Benchmark, ZeroMeasureRuns) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 0);
@@ -143,7 +143,7 @@ TEST(Benchmark, ZeroWarmupRuns) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 3);
@@ -157,7 +157,7 @@ TEST(BenchmarkKernelHelper, KernelNameParameter) {
     cfg.sync_mode = cuda_timer::SyncMode::Blocking;
 
     auto stats = cuda_timer::benchmark_kernel(
-        [](dim3 g, dim3 b) { dummy_kernel<<<g,b>>>(); },
+        [](dim3 g, dim3 b) { cuda_test::launch_dummy(g, b); },
         cfg, dim3(2), dim3(128), "my_kernel"
     );
 
@@ -172,7 +172,7 @@ TEST(Benchmark, StatsContainCorrectFields) {
     cfg.store_samples = true;
 
     auto stats = cuda_timer::benchmark([]() {
-        dummy_kernel<<<1,1>>>();
+        cuda_test::launch_dummy();
     }, cfg);
 
     EXPECT_EQ(stats.count(), 10);
