@@ -49,14 +49,16 @@ function(cuda_timer_apply_warnings target)
             /wd4267   # conversion from 'size_t' to 'int', possible loss of data
         >
     )
-    # CUDA (.cu via nvcc): MSVC-style flags MUST go through -Xcompiler,
-    # otherwise nvcc parses "/W4" as an input file path and fails with
-    # "A single input file is required for a non-link phase".
+    # CUDA (.cu via nvcc): host-compiler flags MUST go through -Xcompiler.
+    # nvcc has its own -Werror option and would swallow the next flag as its
+    # value, failing with:
+    #   nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'
+    # MSVC-style flags have the same problem ("/W4" is read as an input file:
+    # "A single input file is required for a non-link phase").
     target_compile_options(${target} PRIVATE
         $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>>:
-            -Wall -Wextra -Wpedantic -Werror
-            -Wno-unused-parameter
-            -Wno-missing-field-initializers
+            SHELL:-Xcompiler=-Wall -Xcompiler=-Wextra -Xcompiler=-Wpedantic -Xcompiler=-Werror
+            SHELL:-Xcompiler=-Wno-unused-parameter -Xcompiler=-Wno-missing-field-initializers
         >
         $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CXX_COMPILER_ID:MSVC>>:
             SHELL:-Xcompiler=/W4 -Xcompiler=/WX -Xcompiler=/wd4100 -Xcompiler=/wd4244 -Xcompiler=/wd4267 -Xcompiler=/wd4505

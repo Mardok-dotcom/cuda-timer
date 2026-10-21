@@ -41,6 +41,12 @@ jobs:
   build:
     name: Build (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
     runs-on: ${{ matrix.os }}
+    # Windows runners ship VS2022 17.14 (MSVC 14.44), newer than what CUDA
+    # 11.8/12.1 officially support, so nvcc aborts the compiler-id check with
+    # "#error: -- unsupported Microsoft Visual Studio version!". Allow it.
+    # Harmless on Linux, where the host compiler is supported.
+    env:
+      NVCC_PREPEND_FLAGS: --allow-unsupported-compiler
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +111,8 @@ jobs:
     name: Runtime test (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
     needs: build
     runs-on: ${{ matrix.os }}
+    env:
+      NVCC_PREPEND_FLAGS: --allow-unsupported-compiler
     strategy:
       fail-fast: false
       matrix:
@@ -115,15 +123,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache FetchContent _deps
-        uses: actions/cache@v4
-        with:
-          path: build/_deps
-          key: fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: |
-            fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-
-            fetchcontent-${{ matrix.os }}-
-
       - name: Setup MSVC dev cmd (Windows only)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -133,8 +132,6 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda }}
-          use-github-cache: true
-          use-local-cache: true
 
       - name: Check toolchain (ninja + nvcc)
         shell: bash

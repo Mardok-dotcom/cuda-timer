@@ -38,6 +38,8 @@ Header-only C++/CUDA library to measure GPU kernels, keep every sample, and fail
 - NVIDIA GPU with compute capability 7.0+ (CI compiles for sm_70 PTX, JIT-forward-compatible with sm_80/sm_90)
 - (Optional) Nsight Systems / Nsight Compute to visualize NVTX ranges
 
+> **Windows + CUDA < 12.6:** if your Visual Studio 2022 toolset is newer than the one CUDA officially supports, `nvcc` aborts during configure with `#error: -- unsupported Microsoft Visual Studio version!`. Set `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` in the environment before configuring. The CI does this on `windows-2022`.
+
 ## Quickstart
 
 ```bash

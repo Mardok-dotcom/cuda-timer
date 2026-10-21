@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`. Found by CI (the local toolchain is MSVC, where the flags already used `-Xcompiler`).
+
+### CI
+
+- `windows-2022` runners ship a Visual Studio 2022 toolset (MSVC 14.44) newer than the one CUDA 11.8/12.1 support, so `nvcc` aborted the compiler-id check with `#error: -- unsupported Microsoft Visual Studio version!`. The workflow now sets `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler`.
+
 ## [1.1] - 2026-10-21
 
 ### Added
