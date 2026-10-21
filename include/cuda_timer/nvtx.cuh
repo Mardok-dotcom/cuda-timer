@@ -17,6 +17,17 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef NVTX_ENABLED
+// ABI types from the toolkit header. This include MUST stay at global scope:
+// pulling a system or third-party header inside a namespace puts its
+// declarations (and the ones it transitively pulls from glibc) into that
+// namespace. glibc's include guards then report the headers as already
+// included while the global declarations never appear, so any later
+// <unistd.h>/<sys/stat.h> consumer - GoogleTest, for instance - fails with
+// "identifier rmdir is undefined" / "incomplete class type stat".
+#include <nvtx3/nvToolsExt.h>
+#endif
+
 namespace cuda_timer::nvtx {
 
 #ifdef NVTX_ENABLED
@@ -29,11 +40,7 @@ namespace cuda_timer::nvtx {
 // fail. Instead we LoadLibrary/GetProcAddress (Windows) or dlopen/dlsym
 // (Linux) the NVTX injection library. If it is not present (no profiler
 // attached, no driver support), all calls are silent no-ops.
-//
-// ABI types are taken from the toolkit header <nvtx3/nvToolsExt.h> so the
-// layout always matches the installed NVTX version.
 // ---------------------------------------------------------------------------
-#include <nvtx3/nvToolsExt.h>
 
 namespace detail {
 
