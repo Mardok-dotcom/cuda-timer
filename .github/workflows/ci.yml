@@ -79,12 +79,11 @@ jobs:
             "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
             -DCUDA_TIMER_BUILD_EXAMPLES=ON \
             -DCUDA_TIMER_BUILD_TESTS=ON \
-            -DCUDA_TIMER_NVTX=ON \
-            --debug-output
+            -DCUDA_TIMER_NVTX=ON
 
       - name: Build
         shell: bash
-        run: cmake --build build --config Release
+        run: cmake --build build
 
       # Header-only: l'artefatto utile e' la cartella degli header.
       # actions/upload-artifact zipp automaticamente la directory.
