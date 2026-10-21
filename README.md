@@ -32,13 +32,22 @@ Header-only C++/CUDA library to measure GPU kernels, keep every sample, and fail
 
 ## Prerequisites
 
-- CUDA Toolkit 11.8+ (on Windows with a recent Visual Studio, see the note below)
-- CMake 3.18+
-- C++17 compiler: Visual Studio 2019+ / GCC 9+ / Clang 11+
-- NVIDIA GPU with compute capability 7.0+ (CI compiles for sm_70 PTX, JIT-forward-compatible with sm_80/sm_90)
-- (Optional) Nsight Systems / Nsight Compute to visualize NVTX ranges
+| Requirement | Detail |
+|-------------|--------|
+| CMake | 3.18+ (CI runs 3.31) |
+| C++17 compiler | MSVC 19.x, GCC 9+, Clang 11+ |
+| CUDA — Linux | 11.8+ (CI matrix: 11.8.0 and 12.1.1) |
+| CUDA — Windows | **12.4 or newer** (CI: 12.9.2). MSVC 14.44 and newer reject older CUDA in their own STL headers — see the note below |
+| CUDA 13 | Not usable with `sm_70`: Volta was removed in CUDA 13. The CI targets `sm_70` PTX (JIT-forward to `sm_80`/`sm_90`) |
+| Build generator | Ninja (as in CI) or Visual Studio. Ninja is single-config: do **not** pass `--config` to `cmake --build` |
+| GPU | Compute capability 7.0+ (a CUDA-capable driver is enough to build; a device is needed to run the device test suites) |
+| GoogleTest | Fetched automatically by CMake, only with `-DCUDA_TIMER_BUILD_TESTS=ON` |
+| NVTX | No link dependency: the runtime is loaded dynamically. `nvToolsExt64_1.dll` (Windows) or `libnvToolsExt.so` (Linux) is needed only to *see* the ranges in Nsight |
+| Optional | Nsight Systems / Nsight Compute to visualize NVTX ranges |
 
-> **Windows with a recent Visual Studio:** MSVC 14.44 (VS 17.14) and newer reject CUDA < 12.4 in their own STL headers (`STL1002: Unexpected compiler version, expected CUDA 12.4 or newer`), and `nvcc` older than the toolset also aborts during configure with `#error: -- unsupported Microsoft Visual Studio version!`. Two consequences: use CUDA **12.4 or newer** on Windows (the CI uses 12.9.2 there), and if `nvcc` still refuses the toolset, set `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` in the environment before configuring. Linux is unaffected and keeps working with CUDA 11.8.
+> **Windows with a recent Visual Studio:** MSVC 14.44 (VS 17.14) and newer reject CUDA < 12.4 in their own STL headers (`STL1002: Unexpected compiler version, expected CUDA 12.4 or newer`), and an `nvcc` older than the toolset also aborts during configure with `#error: -- unsupported Microsoft Visual Studio version!`. Two consequences: use CUDA **12.4 or newer** on Windows (the CI uses 12.9.2 there), and if `nvcc` still refuses the toolset, set `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` in the environment before configuring. Linux is unaffected and keeps working with CUDA 11.8.
+
+> **Windows, bash shells:** if you configure from a Git Bash (MSYS) prompt, Git's own `link.exe` may shadow the MSVC linker and configure dies with `link: unknown option -- L`. Configure from a Developer Command Prompt or PowerShell instead. The CI does exactly that.
 
 ## Quickstart
 

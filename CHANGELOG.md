@@ -5,19 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-
-- **`nvtx.cuh` included `<nvtx3/nvToolsExt.h>` inside `namespace cuda_timer::nvtx`.** A header included inside a namespace places its declarations - and everything it pulls transitively from glibc - into that namespace. glibc's include guards then report `<unistd.h>` / `<sys/stat.h>` as already included while their global declarations never appear, so any later consumer of those headers breaks. That is what killed the build: GoogleTest failed with `'rmdir' was not declared in this scope; did you mean 'cuda_timer::nvtx::rmdir'?` and `incomplete class type "stat" is not allowed`. On Linux this affected every consumer that included `cuda_timer/nvtx.cuh` (directly, or through `benchmark.cuh`) before another POSIX-dependent header. The include is now at global scope, guarded by `NVTX_ENABLED`.
-- The test suites are no longer CUDA translation units: all eight are host C++ (`.cpp`) and the kernels live in `tests/cuda_test_kernels.cu` behind a host-callable launcher. This was the first reaction to the failure above and is kept on its own merits - GoogleTest is not designed to be compiled by `nvcc`, and keeping it out of every CUDA translation unit removes a class of compiler-specific breakage and speeds up the build.
-- Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`, and `-Wpedantic` is no longer applied to CUDA sources. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`; once that was fixed, `-Wpedantic` failed on every `.cu` because `nvcc`'s generated `cudafe1.cpp` uses line directives GCC calls a "GCC extension". Found by CI (the local toolchain is MSVC, where the flags already used `-Xcompiler` and `-Wpedantic` was never passed).
-
-### CI
-
-- Configure and build run under `pwsh` on Windows instead of `bash`: GitHub prepends `C:\Program Files\Git\usr\bin` to `PATH` for bash steps, and Git ships its own `link.exe`, so CMake picked it as the linker for the CUDA compiler test and configure died with `link: unknown option -- L`.
-- `windows-2022` runners ship a Visual Studio 2022 toolset (MSVC 14.44) whose STL headers reject CUDA older than 12.4 (`STL1002: Unexpected compiler version`) and whose `nvcc` version check aborts with `#error: -- unsupported Microsoft Visual Studio version!`. The matrix is now explicit: Ubuntu 22.04 with CUDA 11.8.0 and 12.1.1, Windows 2022 with CUDA 12.9.2 (the last 12.x line, still supporting `sm_70`; Volta was removed in CUDA 13). `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` covers the toolset check, and `Jimver/cuda-toolkit` was updated from v0.2.15 to v0.2.36 so recent CUDA versions are installable at all.
-
 ## [1.1] - 2026-10-21
 
 ### Added
@@ -42,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logger destructors are `noexcept` and swallow exceptions from `flush()` (the internal mutex lock can throw), instead of risking `std::terminate` and losing the whole measurement.
 - Move operations on `CsvLogger`/`JsonLogger` are explicitly deleted and documented as such: they were already implicitly deleted by the `std::mutex` member while the code claimed the types were movable.
 - Truncation on open was undocumented: now documented on `CsvLogger`, `JsonLogger` and `write_samples()`, including how to append.
+- **`nvtx.cuh` included `<nvtx3/nvToolsExt.h>` inside `namespace cuda_timer::nvtx`.** A header included inside a namespace places its declarations - and everything it pulls transitively from glibc - into that namespace. glibc's include guards then report `<unistd.h>` / `<sys/stat.h>` as already included while their global declarations never appear, so any later consumer of those headers breaks: GoogleTest failed with `'rmdir' was not declared in this scope; did you mean 'cuda_timer::nvtx::rmdir'?` and `incomplete class type "stat" is not allowed`. On Linux this affected every consumer that included `cuda_timer/nvtx.cuh` (directly, or through `benchmark.cuh`) before another POSIX-dependent header. The include is now at global scope, guarded by `NVTX_ENABLED`.
+- The test suites are no longer CUDA translation units: all eight are host C++ (`.cpp`) and the kernels live in `tests/cuda_test_kernels.cu` behind a host-callable launcher. GoogleTest is not designed to be compiled by `nvcc`, and keeping it out of every CUDA translation unit removes a class of compiler-specific breakage and speeds up the build.
+- Warning flags for `.cu` files on GCC/Clang now go through `-Xcompiler`, and `-Wpedantic` is no longer applied to CUDA sources. `nvcc` has its own `-Werror` option and parsed the following flag as its value, so any Linux build of the examples/tests died with `nvcc fatal : Value '-Wno-unused-parameter' is not defined for option 'Werror'`; once that was fixed, `-Wpedantic` failed on every `.cu` because `nvcc`'s generated `cudafe1.cpp` uses line directives GCC calls a "GCC extension".
+
+### CI
+
+- The matrix is explicit instead of a cross product: Ubuntu 22.04 with CUDA 11.8.0 and 12.1.1, Windows 2022 with CUDA 12.9.2. On `windows-2022` the runner ships MSVC 14.44, whose STL headers reject CUDA older than 12.4 (`STL1002: Unexpected compiler version`) and whose `nvcc` version check aborts with `#error: -- unsupported Microsoft Visual Studio version!`; 12.9.2 is the last 12.x line and still supports `sm_70` (Volta was removed in CUDA 13). `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler` covers the toolset check.
+- Configure and build run under `pwsh` on Windows instead of `bash`: GitHub prepends `C:\Program Files\Git\usr\bin` to `PATH` for bash steps, and Git ships its own `link.exe`, so CMake picked it as the linker for the CUDA compiler test and configure died with `link: unknown option -- L`.
+- `Jimver/cuda-toolkit` updated from v0.2.15 to v0.2.36: the old release did not know recent CUDA versions (12.6.1 was reported as "not available" for that reason).
 
 ## [1.0.0] - 2026-10-06
 
