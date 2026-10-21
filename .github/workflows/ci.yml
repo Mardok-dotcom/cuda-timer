@@ -51,17 +51,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # FetchContent (googletest) cache: evita il re-download a ogni run.
-      # La cartella _deps e' creata da CMake dentro il build dir.
-      - name: Cache FetchContent _deps
-        uses: actions/cache@v4
-        with:
-          path: build/_deps
-          key: fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: |
-            fetchcontent-${{ matrix.os }}-cuda${{ matrix.cuda }}-
-            fetchcontent-${{ matrix.os }}-
-
       # Su Windows il generator Ninja ha bisogno di cl.exe nel PATH.
       - name: Setup MSVC dev cmd (Windows only)
         if: runner.os == 'Windows'
@@ -72,9 +61,6 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda }}
-          # Evita download di componenti non necessari su hosted runner.
-          use-github-cache: true
-          use-local-cache: true
 
       - name: Check toolchain (ninja + nvcc)
         shell: bash
@@ -82,7 +68,8 @@ jobs:
           cmake --version
           ninja --version
           nvcc --version
-          echo "CUDA_PATH=${CUDA_PATH:-$Env:CUDA_PATH}"
+          echo "CUDA_PATH=$CUDA_PATH"
+          echo "CUDA_TOOLKIT_ROOT_DIR=$CUDA_TOOLKIT_ROOT_DIR"
 
       - name: Configure (Ninja, arch sm_70, examples+tests+NVTX ON)
         shell: bash
@@ -92,7 +79,8 @@ jobs:
             "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
             -DCUDA_TIMER_BUILD_EXAMPLES=ON \
             -DCUDA_TIMER_BUILD_TESTS=ON \
-            -DCUDA_TIMER_NVTX=ON
+            -DCUDA_TIMER_NVTX=ON \
+            --debug-output
 
       - name: Build
         shell: bash
