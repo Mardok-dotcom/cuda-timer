@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `read_samples_csv(path, label)` reads one series out of a samples CSV, and `labels_in_csv(path)` reports the distinct labels in first-appearance order. Both parse the label field with RFC 4180 quoting, so a label holding a comma or a doubled quote round-trips. +5 GoogleTest cases.
+
+### Changed
+
+- `compare_files()` and `perf_gate` now refuse to decide (`suspect`, exit 2) when a samples file holds more than one label, when several `--baseline` or `--current` files disagree on the label, or when baseline and current carry different labels. `write_samples(..., std::ios::app)` appends a second kernel to an existing file, and pooling those rows produced a verdict about neither kernel.
+- `read_samples_csv(path, label)` throws `std::runtime_error("label '...' not found in ...")` when no row carries that label, instead of returning an empty vector.
+
 ## [1.1] - 2026-10-21
 
 ### Added

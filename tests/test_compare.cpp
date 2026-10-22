@@ -181,6 +181,114 @@ TEST(Compare, ReadSamplesCsvRejectsEmptyFile) {
     std::filesystem::remove(path);
 }
 
+TEST(Compare, ReadSamplesCsvFiltersByLabel) {
+    const std::string path = "test_compare_two_labels.csv";
+    {
+        std::ofstream out(path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        out << "kernel_a,0,1.0\n";
+        out << "kernel_b,0,2.0\n";
+        out << "kernel_a,1,3.0\n";
+    }
+
+    const auto a = cuda_timer::read_samples_csv(path, "kernel_a");
+    const auto b = cuda_timer::read_samples_csv(path, "kernel_b");
+    const auto labels = cuda_timer::labels_in_csv(path);
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(a.size(), 2u);
+    EXPECT_DOUBLE_EQ(a[0], 1.0);
+    EXPECT_DOUBLE_EQ(a[1], 3.0);
+    ASSERT_EQ(b.size(), 1u);
+    EXPECT_DOUBLE_EQ(b[0], 2.0);
+    ASSERT_EQ(labels.size(), 2u);
+    EXPECT_EQ(labels[0], "kernel_a");
+    EXPECT_EQ(labels[1], "kernel_b");
+}
+
+TEST(Compare, ReadSamplesCsvFiltersQuotedLabel) {
+    // write_samples() escapes a label containing a comma, so the reader has to
+    // honour RFC 4180 quoting instead of splitting on the first comma.
+    const std::string path = "test_compare_quoted_label.csv";
+    {
+        std::ofstream out(path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        out << "\"kernel,fast\",0,1.5\n";
+        out << "plain,0,2.5\n";
+    }
+
+    const auto fast = cuda_timer::read_samples_csv(path, "kernel,fast");
+    const auto labels = cuda_timer::labels_in_csv(path);
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(fast.size(), 1u);
+    EXPECT_DOUBLE_EQ(fast[0], 1.5);
+    ASSERT_EQ(labels.size(), 2u);
+    EXPECT_EQ(labels[0], "kernel,fast");
+}
+
+TEST(Compare, ReadSamplesCsvMissingLabelThrows) {
+    const std::string path = "test_compare_missing_label.csv";
+    {
+        std::ofstream out(path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        out << "kernel_a,0,1.0\n";
+    }
+
+    EXPECT_THROW(cuda_timer::read_samples_csv(path, "nope"), std::runtime_error);
+    std::filesystem::remove(path);
+}
+
+TEST(Compare, CompareFilesRejectsMixedLabels) {
+    // write_samples(..., std::ios::app) with a different label appends a
+    // second series: pooling it would grade neither kernel.
+    const std::string baseline_path = "test_compare_mixed_baseline.csv";
+    const std::string current_path = "test_compare_mixed_current.csv";
+    {
+        std::ofstream out(baseline_path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        out << "kernel_a,0,1.0\n";
+        out << "kernel_b,1,1.0\n";
+    }
+    write_csv(current_path, 1.05, 40, 0.002);
+
+    const auto result = cuda_timer::compare_files(baseline_path, current_path);
+    std::filesystem::remove(baseline_path);
+    std::filesystem::remove(current_path);
+
+    EXPECT_EQ(result.verdict, cuda_timer::Verdict::Suspect);
+    EXPECT_NE(result.reason.find("2 labels"), std::string::npos);
+    EXPECT_NE(result.reason.find("kernel_a"), std::string::npos);
+}
+
+TEST(Compare, CompareFilesRejectsLabelMismatch) {
+    const std::string baseline_path = "test_compare_label_a.csv";
+    const std::string current_path = "test_compare_label_b.csv";
+    {
+        std::ofstream out(baseline_path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        for (int i = 0; i < 40; ++i) out << "kernel_a," << i << ",1.0\n";
+    }
+    {
+        std::ofstream out(current_path);
+        out.imbue(std::locale::classic());
+        out << "label,index,value\n";
+        for (int i = 0; i < 40; ++i) out << "kernel_b," << i << ",1.05\n";
+    }
+
+    const auto result = cuda_timer::compare_files(baseline_path, current_path);
+    std::filesystem::remove(baseline_path);
+    std::filesystem::remove(current_path);
+
+    EXPECT_EQ(result.verdict, cuda_timer::Verdict::Suspect);
+    EXPECT_NE(result.reason.find("label mismatch"), std::string::npos);
+}
+
 TEST(Compare, CompareFilesEndToEnd) {
     const std::string baseline_path = "test_compare_baseline.csv";
     const std::string current_path = "test_compare_current.csv";

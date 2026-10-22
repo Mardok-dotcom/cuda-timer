@@ -190,12 +190,42 @@ int main(int argc, char** argv) {
 
     std::vector<std::vector<double>> baseline_runs;
     std::vector<std::vector<double>> current_runs;
+    std::string baseline_label;
+    std::string current_label;
+    std::string label_problem;
     try {
-        for (const auto& path : baseline_paths) {
-            baseline_runs.push_back(cuda_timer::read_samples_csv(path));
+        // Every file must hold exactly one series, and all runs on a side must
+        // describe the same kernel: write_samples(..., std::ios::app) can
+        // append a different one, and pooling would compare nothing real.
+        const auto read_side = [](const std::vector<std::string>& paths,
+                                  const char* side,
+                                  std::vector<std::vector<double>>* runs,
+                                  std::string* side_label) -> std::string {
+            std::string expected;
+            for (const auto& path : paths) {
+                auto file = cuda_timer::detail::load_series_file(path, side);
+                if (!file.reason.empty()) {
+                    return file.reason;
+                }
+                if (expected.empty()) {
+                    expected = file.label;
+                } else if (expected != file.label) {
+                    return std::string(side) + " runs mix labels ('" + expected +
+                           "' and '" + file.label + "')";
+                }
+                runs->push_back(file.values);
+            }
+            *side_label = expected;
+            return std::string();
+        };
+
+        label_problem = read_side(baseline_paths, "baseline", &baseline_runs, &baseline_label);
+        if (label_problem.empty()) {
+            label_problem = read_side(current_paths, "current", &current_runs, &current_label);
         }
-        for (const auto& path : current_paths) {
-            current_runs.push_back(cuda_timer::read_samples_csv(path));
+        if (label_problem.empty() && baseline_label != current_label) {
+            label_problem = "label mismatch: baseline '" + baseline_label + "' vs current '" +
+                            current_label + "'";
         }
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
@@ -204,6 +234,11 @@ int main(int argc, char** argv) {
 
     cuda_timer::ComparisonResult result =
         cuda_timer::compare_runs(baseline_runs, current_runs, options);
+
+    if (!label_problem.empty()) {
+        result.verdict = cuda_timer::Verdict::Suspect;
+        result.reason = label_problem;
+    }
 
     // Environment sidecars: explicit flag wins, otherwise probe next to the CSV.
     if (baseline_meta.empty()) baseline_meta = sidecar_path(baseline_paths.front());

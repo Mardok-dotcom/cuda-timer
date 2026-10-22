@@ -21,8 +21,9 @@ enum class Verdict {
     Pass,        ///< Difference within the configured threshold
     Regression,  ///< Current is slower than baseline beyond the threshold
     Improvement, ///< Current is faster than baseline beyond the threshold
-    Suspect      ///< Not enough samples, non-positive baseline, noisy data, or
-                 ///< incompatible test environments
+    Suspect      ///< Not enough samples, non-positive baseline, noisy data,
+                 ///< incompatible environments, or a samples file that mixes
+                 ///< series / labels
 };
 
 /**
@@ -460,25 +461,74 @@ inline ComparisonResult compare_runs(
     return result;
 }
 
+namespace detail {
+
 /**
- * @brief Reads a samples CSV as produced by write_samples().
+ * @brief One row of a samples CSV: the series label and the measured value.
+ */
+struct SampleRow {
+    std::string label;
+    double value = 0.0;
+};
+
+/**
+ * @brief Parses the first CSV field of a row, honouring RFC 4180 quoting.
  *
- * Expected format: `label,index,value` header (optional) followed by one row
- * per sample. Only the last comma-separated field is read, so labels
- * containing commas (quoted per RFC 4180) are harmless. Parsing uses the
- * classic "C" locale, so a decimal comma installed globally by the host
- * program cannot break it.
+ * write_samples() escapes labels, so a label may contain commas and quotes: a
+ * quoted field is opened and closed by '"', and an embedded quote is doubled.
+ * A label containing CR/LF is written across several physical lines and is
+ * deliberately rejected by the row reader rather than silently mis-parsed.
  *
- * @param path Path to the CSV file
+ * @throws std::runtime_error if the field is not terminated or the row has no
+ *         separator
+ */
+inline std::string parse_csv_label(const std::string& line) {
+    if (line.empty()) {
+        throw std::runtime_error("empty row");
+    }
+    if (line.front() != '"') {
+        const auto comma = line.find(',');
+        if (comma == std::string::npos) {
+            throw std::runtime_error("missing separator in '" + line + "'");
+        }
+        return line.substr(0, comma);
+    }
+    std::string label;
+    for (std::size_t i = 1; i < line.size(); ++i) {
+        if (line[i] == '"') {
+            if (i + 1 < line.size() && line[i + 1] == '"') {
+                label += '"';
+                ++i;
+                continue;
+            }
+            return label;
+        }
+        label += line[i];
+    }
+    throw std::runtime_error("unterminated quoted field in '" + line + "'");
+}
+
+inline std::string join_labels(const std::vector<std::string>& labels) {
+    std::string joined;
+    for (std::size_t i = 0; i < labels.size(); ++i) {
+        if (i != 0) joined += ", ";
+        joined += labels[i];
+    }
+    return joined;
+}
+
+/**
+ * @brief Reads every row of a samples CSV produced by write_samples().
+ *
  * @throws std::runtime_error if the file is missing, empty or malformed
  */
-inline std::vector<double> read_samples_csv(const std::string& path) {
+inline std::vector<SampleRow> read_sample_rows(const std::string& path) {
     std::ifstream file(path);
     if (!file) {
         throw std::runtime_error("cannot open samples file: " + path);
     }
 
-    std::vector<double> samples;
+    std::vector<SampleRow> rows;
     std::string line;
     std::size_t line_number = 0;
     bool first_content_line = true;
@@ -500,26 +550,153 @@ inline std::vector<double> read_samples_csv(const std::string& path) {
                                      " in " + path);
         }
         try {
-            samples.push_back(detail::parse_double(line.substr(comma + 1)));
+            SampleRow row;
+            row.label = parse_csv_label(line);
+            row.value = parse_double(line.substr(comma + 1));
+            rows.push_back(row);
         } catch (const std::exception& e) {
             throw std::runtime_error("line " + std::to_string(line_number) + " in " + path +
                                      ": " + e.what());
         }
     }
 
-    if (samples.empty()) {
+    if (rows.empty()) {
         throw std::runtime_error("no samples in " + path);
+    }
+    return rows;
+}
+
+/**
+ * @brief One samples file loaded as a single series.
+ *
+ * `reason` is empty when the file holds exactly one label; otherwise it
+ * explains why the file cannot be used as a series.
+ */
+struct SeriesFile {
+    std::string label;
+    std::vector<double> values;
+    std::string reason;
+};
+
+inline SeriesFile load_series_file(const std::string& path, const char* side) {
+    SeriesFile file;
+    const auto rows = read_sample_rows(path);
+
+    std::vector<std::string> labels;
+    file.values.reserve(rows.size());
+    for (const auto& row : rows) {
+        file.values.push_back(row.value);
+        if (std::find(labels.begin(), labels.end(), row.label) == labels.end()) {
+            labels.push_back(row.label);
+        }
+    }
+
+    if (labels.size() != 1) {
+        file.reason = std::string(side) + " holds " + std::to_string(labels.size()) +
+                      " labels (" + join_labels(labels) + "); one series per file";
+        return file;
+    }
+    file.label = labels.front();
+    return file;
+}
+
+} // namespace detail
+
+/**
+ * @brief Reads a samples CSV as produced by write_samples().
+ *
+ * Expected format: `label,index,value` header (optional) followed by one row
+ * per sample. Every row contributes its value, whatever its label: use the
+ * two-argument overload to select one series. Parsing uses the classic "C"
+ * locale, so a decimal comma installed globally by the host program cannot
+ * break it.
+ *
+ * @param path Path to the CSV file
+ * @throws std::runtime_error if the file is missing, empty or malformed
+ */
+inline std::vector<double> read_samples_csv(const std::string& path) {
+    const auto rows = detail::read_sample_rows(path);
+    std::vector<double> samples;
+    samples.reserve(rows.size());
+    for (const auto& row : rows) samples.push_back(row.value);
+    return samples;
+}
+
+/**
+ * @brief Reads only the samples of one series from a samples CSV.
+ *
+ * Use this when the file may hold more than one label, for instance after
+ * write_samples(..., std::ios::app) appended a second kernel to it.
+ *
+ * @param path  Path to the CSV file
+ * @param label Exact series label to keep (case sensitive)
+ * @throws std::runtime_error if the file is malformed or no row has that label
+ */
+inline std::vector<double> read_samples_csv(const std::string& path,
+                                            const std::string& label) {
+    const auto rows = detail::read_sample_rows(path);
+    std::vector<double> samples;
+    for (const auto& row : rows) {
+        if (row.label == label) samples.push_back(row.value);
+    }
+    if (samples.empty()) {
+        throw std::runtime_error("label '" + label + "' not found in " + path);
     }
     return samples;
 }
 
 /**
+ * @brief Distinct labels in a samples CSV, in order of first appearance.
+ *
+ * @throws std::runtime_error if the file is missing, empty or malformed
+ */
+inline std::vector<std::string> labels_in_csv(const std::string& path) {
+    const auto rows = detail::read_sample_rows(path);
+    std::vector<std::string> labels;
+    for (const auto& row : rows) {
+        if (std::find(labels.begin(), labels.end(), row.label) == labels.end()) {
+            labels.push_back(row.label);
+        }
+    }
+    return labels;
+}
+
+/**
  * @brief Convenience overload comparing two samples CSV files.
+ *
+ * Refuses to decide (Suspect) when a file holds more than one series, or when
+ * the two series have different labels. write_samples(..., std::ios::app) can
+ * append a second kernel to the same file, and pooling those rows would
+ * produce a verdict about neither kernel; the same goes for comparing a
+ * baseline recorded from kernel A against a current recorded from kernel B.
  */
 inline ComparisonResult compare_files(const std::string& baseline_csv,
                                       const std::string& current_csv,
                                       const ComparisonOptions& opts = {}) {
-    return compare(read_samples_csv(baseline_csv), read_samples_csv(current_csv), opts);
+    ComparisonResult result;
+
+    const detail::SeriesFile baseline = detail::load_series_file(baseline_csv, "baseline");
+    if (!baseline.reason.empty()) {
+        result.verdict = Verdict::Suspect;
+        result.reason = baseline.reason;
+        return result;
+    }
+
+    const detail::SeriesFile current = detail::load_series_file(current_csv, "current");
+    if (!current.reason.empty()) {
+        result.verdict = Verdict::Suspect;
+        result.reason = current.reason;
+        return result;
+    }
+
+    if (baseline.label != current.label) {
+        result.verdict = Verdict::Suspect;
+        result.reason = "label mismatch: baseline '" + baseline.label + "' vs current '" +
+                        current.label + "'";
+        return result;
+    }
+
+    return compare(baseline.values, current.values, opts);
 }
 
 /**

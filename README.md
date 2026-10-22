@@ -225,8 +225,10 @@ Numbers are always formatted with `std::locale::classic()`, so a decimal comma i
 | `summarize(samples)` | `count`, `mean`, `stddev`, `min`, `max`, `median`, `p90`, `p99` |
 | `compare(baseline, current, opts = {})` | Median-based verdict + relative deltas + human-readable reason |
 | `compare_runs(baseline_runs, current_runs, opts = {})` | Median of per-run medians + run-to-run spread check |
-| `compare_files(baseline_csv, current_csv, opts = {})` | Same, reading two `write_samples()` CSVs |
+| `compare_files(baseline_csv, current_csv, opts = {})` | Same, reading two `write_samples()` CSVs; `suspect` when a file holds several series or the two labels differ |
 | `read_samples_csv(path)` | Locale-independent reader for `label,index,value` files |
+| `read_samples_csv(path, label)` | Same, keeping only one series; throws `runtime_error` when no row has that label |
+| `labels_in_csv(path)` | Distinct labels in a samples file, in order of first appearance |
 | `Environment` / `read_environment(path)` | Hardware identity read from a `.meta.json` sidecar |
 | `environment_compatible(a, b, reason)` | Compares device name, compute capability, driver and runtime CUDA versions |
 | `to_json(result)` | Stable JSON report (deltas, runs, spread, environment), classic locale |
@@ -309,7 +311,7 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 
 ## Quality
 
-- **8 test suites / 116 GoogleTest cases**, wired into `ctest`.
+- **8 test suites / 121 GoogleTest cases**, wired into `ctest`.
 - Host-only suites always run; device suites exit with code 77 without a GPU and are reported as `skipped` instead of failing.
 - GoogleTest is never compiled by `nvcc`: the suites are host C++ (`.cpp`) and the only CUDA translation unit in the test tree is `tests/cuda_test_kernels.cu`, which exposes a kernel launcher. Compiling gtest headers with `nvcc` fails on glibc hosts, where its device pass does not see the POSIX declarations gtest relies on (`rmdir`, `isatty`, `struct stat`).
 - CI matrix: Ubuntu 22.04 with CUDA 11.8 and 12.1 (the documented floor), Windows 2022 with CUDA 12.9 (MSVC 14.44's STL headers reject CUDA < 12.4). Warnings are fatal everywhere: `-Wall -Wextra -Wpedantic -Werror` for host C++, `/W4 /WX` for MSVC, and `-Wall -Wextra -Werror` for `.cu` files (routed through `-Xcompiler`; `nvcc`'s own generated code is not `-Wpedantic`-clean).
@@ -320,7 +322,7 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 - **No CUDA Graph support (by design).** cuda-timer does not capture graphs and does not do per-node analysis; use [Nsight Systems](https://developer.nvidia.com/nsight-systems) / Nsight Compute for that. Timing a graph *launch* needs no special support: `cudaGraphLaunch()` is ordinary stream work, so `Timer` / `benchmark()` bracket it like any kernel (covered by `tests/test_benchmark.cpp`).
 - **No clock/throttle sampling.** NVML is out of scope, so the fingerprint does not include clocks. Run-to-run spread catches instability between runs, not a uniform clock drop within a run.
 - **The fingerprint is opt-in.** If the harness does not call `write_environment()`, `perf_gate` compares the CSVs without verifying the environment (it prints a warning). The gate is honest only when you feed it the sidecar.
-- **One kernel per comparison.** There is no multi-kernel manifest yet; invoke `perf_gate` once per kernel.
+- **One series per file.** `write_samples(..., std::ios::app)` happily appends a second kernel to an existing CSV, so `perf_gate` and `compare_files()` refuse to decide (`suspect`, exit 2) when a file holds more than one label, or when baseline and current carry different labels. Use `read_samples_csv(path, label)` to pick one series explicitly. There is still no multi-kernel manifest: invoke `perf_gate` once per kernel.
 - **NVTX visibility needs the runtime.** Ranges compile everywhere, but Nsight only shows them when `nvToolsExt64_1.dll` (Windows, ships with the driver/Nsight) or `libnvToolsExt.so` (Linux) is loadable at runtime.
 - **Clock = GPU timestamps.** Durations come from `cudaEventElapsedTime` (GPU timestamps, ns resolution); host launch overhead is not included.
 
